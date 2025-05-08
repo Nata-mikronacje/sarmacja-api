@@ -1,6 +1,6 @@
 # sarmacja-api
 
-sarmacja-api to pakiet npm, który umożliwia integrację z systemem gospodarczym [Księstwa Sarmacji](https://sarmacja.org.pl/).
+sarmacja-api to pakiet npm, który umożliwia integrację z systemem gospodarczym [Księstwa Sarmacji](https://sarmacja.org).
 
 ## Instalacja
 
