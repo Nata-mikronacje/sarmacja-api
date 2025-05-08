@@ -1,5 +1,5 @@
 import { createHash, createCipheriv, createDecipheriv } from "crypto";
-import { post as _post } from "axios";
+import axios from "axios";
 import { URLSearchParams } from "url";
 
 class Integracja {
@@ -106,7 +106,7 @@ class Integracja {
     const form = new URLSearchParams(data).toString();
 
     try {
-      const res = await _post(url, form, {
+      const res = await axios.post(url, form, {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
       return res.data;
@@ -143,22 +143,14 @@ class Integracja {
   }
 
   encrypt(text) {
-    const cipher = createCipheriv(
-      "aes-128-cbc",
-      this.appSecret,
-      this.iv
-    );
+    const cipher = createCipheriv("aes-128-cbc", this.appSecret, this.iv);
     let encrypted = cipher.update(text, "utf8", "base64");
     encrypted += cipher.final("base64");
     return encrypted;
   }
 
   decrypt(text) {
-    const decipher = createDecipheriv(
-      "aes-128-cbc",
-      this.appSecret,
-      this.iv
-    );
+    const decipher = createDecipheriv("aes-128-cbc", this.appSecret, this.iv);
     let decrypted = decipher.update(text, "base64", "utf8");
     decrypted += decipher.final("utf8");
     return decrypted;
