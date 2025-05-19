@@ -40,9 +40,9 @@ app.get("/", async (req, res) => {
 
   const auth = new Integracja();
   auth.setConfiguration({
-    appId: "S00337",
+    appId: "X00000",
     appName: "Testowa Aplikacja",
-    appSecret: "8ece3d390b03d318",
+    appSecret: "0000000000000000",
     adress: "https://localhost:3000/",
     options: {
       przelew: true,
