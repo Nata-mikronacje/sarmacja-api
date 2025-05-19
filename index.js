@@ -146,6 +146,7 @@ class Integracja {
     const cipher = createCipheriv("aes-128-cbc", this.appSecret, this.iv);
     let encrypted = cipher.update(text, "utf8", "base64");
     encrypted += cipher.final("base64");
+    encrypted = Buffer.from(encrypted).toString("base64");
     return encrypted;
   }
 
@@ -153,6 +154,7 @@ class Integracja {
     const decipher = createDecipheriv("aes-128-cbc", this.appSecret, this.iv);
     let decrypted = decipher.update(text, "base64", "utf8");
     decrypted += decipher.final("utf8");
+    decrypted = Buffer.from(decrypted).toString("utf8");
     return decrypted;
   }
 
