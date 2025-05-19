@@ -130,3 +130,4 @@ Więcej informacji na temat użycia znajdziesz [tutaj](https://fc.sarmacja.org/v
 ## Autorzy
 
 - [@Nata-mikronacje](https://github.com/Nata-mikronacje)
+- [@Anszlus](https://github.com/anszlus)

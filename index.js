@@ -1,6 +1,5 @@
-import { createHash, createCipheriv, createDecipheriv } from "crypto";
-import axios from "axios";
-import { URLSearchParams } from "url";
+const crypto = require("crypto");
+const axios = require("axios");
 
 class Integracja {
   constructor() {
@@ -15,150 +14,96 @@ class Integracja {
     this.config = null;
     this.sarmaUrl = "https://www.sarmacja.org/integracja/";
     this.iv = null;
+    this._session = {};
+  }
 
-    this._session = {
-      at: null,
-      user: null,
-    };
+  setSession({ user = null, at = null }) {
+    if (!this._session) this._session = {};
+    if (user) this.user = user;
+    if (at) this._session.at = at;
+    if (user) this._session.user = user;
   }
 
   setConfiguration(config) {
-    if (
-      !config ||
-      !config.appId ||
-      !config.appSecret ||
-      !config.adress ||
-      !config.appName
-    ) {
+    if (!this._session) this._session = {};
+    if (config && Object.keys(config).length > 0) {
+      if (config.appId && config.appSecret && config.adress && config.appName) {
+        this.appId = config.appId;
+        this.appSecret = config.appSecret;
+        this.adress = config.adress;
+        if (!config.options) config.options = {};
+        this.options = Buffer.from(JSON.stringify(config.options)).toString(
+          "base64"
+        );
+
+        this.appName = config.appName;
+        if (this._session.at) this.accessToken = this._session.at;
+        if (this._session.user) this.user = this._session.user;
+        this.config = config;
+        this.iv = crypto
+          .createHash("sha256")
+          .update(this.appSecret)
+          .digest("hex")
+          .substring(0, 16);
+        this.wynik.error = 200;
+      } else {
+        throw new Error(
+          "Plik konfiguracyjny niepełny. Aplikacja została automatycznie wyłączona."
+        );
+      }
+    } else {
       throw new Error(
         "Brak pliku konfiguracyjnego. Aplikacja została automatycznie wyłączona."
       );
     }
-
-    this.appId = config.appId;
-    this.appSecret = config.appSecret;
-    this.adress = config.adress;
-    this.appName = config.appName;
-    this.options = Buffer.from(JSON.stringify(config.options || {})).toString(
-      "base64"
-    );
-    this.config = config;
-
-    this.accessToken = this._session.at;
-    this.user = this._session.user;
-
-    this.iv = createHash("sha256")
-      .update(this.appSecret)
-      .digest("hex")
-      .substring(0, 16);
-    this.wynik.error = 200;
   }
 
   async action(parm, action) {
     if (!this.appSecret) {
-      this.wynik = { error: 500, errorD: "Brak podstawowych parametrów." };
-      return;
+      this.wynik.error = 500;
+      this.wynik.errorD =
+        "Niemożliwe wykonanie akcji. Brak podstawowych parametrów.";
+    } else {
+      parm.appS = this.appSecret;
+      parm.userToken = parm.aT;
+      const dane = {
+        dane: this.encrypt(JSON.stringify(parm)),
+        appId: this.appId,
+      };
+
+      this.wynik = await this.request(dane, action);
     }
-
-    parm.appS = this.appSecret;
-    parm.userToken = this.accessToken;
-
-    const data = {
-      dane: this.encrypt(JSON.stringify(parm)),
-      appId: this.appId,
-    };
-
-    this.wynik = await this._request(data, action);
   }
 
   async przelew(parm) {
     if (!this.appSecret) {
-      this.wynik = { error: 500, errorD: "Brak podstawowych parametrów." };
-      return;
-    }
-
-    parm.appS = this.appSecret;
-    parm.userToken = this.accessToken;
-    parm.przelewId = Math.floor(Math.random() * 9000 + 1000);
-
-    const data = {
-      dane: this.encrypt(JSON.stringify(parm)),
-      appId: this.appId,
-    };
-
-    this.wynik = await this._request(data, "przelew");
-
-    if (
-      this.wynik.error === 200 &&
-      this.decrypt(this.wynik.body) != parm.przelewId
-    ) {
-      this.wynik.error = 700;
-      this.wynik.errorD = "Ktoś stara się oszukać system.";
+      this.wynik.error = 500;
+      this.wynik.errorD =
+        "Niemożliwe wykonanie akcji. Brak podstawowych parametrów.";
+    } else {
+      parm.appS = this.appSecret;
+      parm.userToken = this.accessToken;
+      parm.przelewId = Math.floor(Math.random() * 9000) + 1000;
+      const dane = {
+        dane: this.encrypt(JSON.stringify(parm)),
+        appId: this.appId,
+      };
+      this.wynik = await this.request(dane, "przelew");
+      if (
+        this.wynik.error === 200 &&
+        this.decrypt(this.wynik.body) != parm.przelewId
+      ) {
+        this.wynik.error = 700;
+        this.wynik.errorD = "Ktoś stara się oszukać system.";
+      }
     }
   }
 
   async ogolnaIntegracja(parm, action) {
-    this.wynik = await this._request(parm, action);
+    this.wynik = await this.request(parm, action);
   }
 
-  async _request(data, method) {
-    const url = `${this.sarmaUrl}+${method}/`;
-    const form = new URLSearchParams(data).toString();
-
-    try {
-      const res = await axios.post(url, form, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      });
-      return res.data;
-    } catch (err) {
-      return { error: 500, errorD: err.message };
-    }
-  }
-
-  loginURL() {
-    return `${this.sarmaUrl}auth2/?options=${
-      this.options
-    }&redirect=${Buffer.from(this.adress).toString(
-      "base64"
-    )}&appName=${Buffer.from(this.appName).toString("base64")}&appId=${
-      this.appId
-    }`;
-  }
-
-  async getUser(post) {
-    if (!this.user) {
-      await this._autorization(post);
-    } else {
-      await this._userUpdate();
-    }
-    return this.user;
-  }
-
-  getWynik() {
-    return this.wynik;
-  }
-
-  getAppPass() {
-    return this.appSecret;
-  }
-
-  encrypt(text) {
-    const cipher = createCipheriv("aes-128-cbc", this.appSecret, this.iv);
-    let encrypted = cipher.update(text, "utf8", "base64");
-    encrypted += cipher.final("base64");
-    encrypted = Buffer.from(encrypted).toString("base64");
-    return encrypted;
-  }
-
-  decrypt(text) {
-    const decipher = createDecipheriv("aes-128-cbc", this.appSecret, this.iv);
-    let decrypted = decipher.update(text, "base64", "utf8");
-    decrypted += decipher.final("utf8");
-    decrypted = Buffer.from(decrypted).toString("utf8");
-    return decrypted;
-  }
-
-  async _autorization(post) {
+  async autorization(post) {
     if (post && post.at) {
       const parm = {
         aT: post.at,
@@ -167,30 +112,108 @@ class Integracja {
         appI: this.appId,
         userId: post.paszport,
       };
-
       await this.action(parm, "login");
-
       if (this.wynik.error === 200) {
         this.user = this.wynik.body;
         this.accessToken = post.at;
-
-        this._session.at = this.accessToken;
+        this._session.at = post.at;
         this._session.user = this.user;
       }
     }
   }
 
-  async _userUpdate() {
-    if (!this.user?.paszport) return;
-
+  async userUpdate() {
     const parm = { userId: this.user.paszport };
-    const result = await this._request(parm, "commonUserData");
-
-    if (result.error === 200) {
-      this.user = result.body;
+    await this.ogolnaIntegracja(parm, "commonUserData");
+    if (this.wynik.error === 200) {
+      this.user = this.wynik.body;
       this._session.user = this.user;
     }
   }
+
+  async request(data, method) {
+    const url = this.sarmaUrl + "+" + method + "/";
+    try {
+      const response = await axios.post(url, this.getUrl(data, 0), {
+        maxRedirects: 5,
+        validateStatus: () => true,
+      });
+      return response.data;
+    } catch (e) {
+      return { error: 500, errorD: "Błąd połączenia: " + e.message };
+    }
+  }
+
+  loginURL() {
+    return (
+      this.sarmaUrl +
+      "auth2/?options=" +
+      this.options +
+      "&redirect=" +
+      Buffer.from(this.adress).toString("base64") +
+      "&appName=" +
+      Buffer.from(this.appName).toString("base64") +
+      "&appId=" +
+      this.appId
+    );
+  }
+
+  async getUser(post = {}) {
+    if (!this.user) {
+      await this.autorization(post);
+    } else {
+      await this.userUpdate();
+    }
+    return this.user;
+  }
+
+  getWynik() {
+    return this.wynik;
+  }
+
+  getUrl(parm, opt = 1) {
+    const query = new URLSearchParams(parm).toString();
+    if (opt) {
+      return this.sarmaUrl + "?" + query;
+    } else {
+      return query;
+    }
+  }
+
+  getAppPass() {
+    return this.appSecret;
+  }
+
+  encrypt(string) {
+    const cipher = crypto.createCipheriv(
+      "aes-128-cbc",
+      Buffer.from(this.appSecret.substring(0, 16), "utf8"),
+      Buffer.from(this.iv, "utf8")
+    );
+    let encrypted = cipher.update(string, "utf8");
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    // First base64 encoding (like openssl_encrypt with option 0)
+    const base64Once = encrypted.toString("base64");
+    // Second base64 encoding (like base64_encode in PHP)
+    const base64Twice = Buffer.from(base64Once, "utf8").toString("base64");
+
+    return base64Twice;
+  }
+
+  decrypt(string) {
+    const decipher = crypto.createDecipheriv(
+      "aes-128-cbc",
+      this.appSecret.substring(0, 16),
+      this.iv
+    );
+    let decrypted = decipher.update(string, "base64", "utf8");
+    decrypted += decipher.final("utf8");
+
+    const base64Once = decrypted.toString("base64");
+    // Second base64 encoding (like base64_encode in PHP)
+    const base64Twice = Buffer.from(base64Once, "utf8").toString("base64");
+    return base64Twice;
+  }
 }
 
-export default Integracja;
+module.exports = Integracja;
